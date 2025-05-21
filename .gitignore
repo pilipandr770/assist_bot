@@ -1,0 +1,55 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.pyc
+*.log
+
+# === Віртуальне середовище ===
+venv/
+env/
+ENV/
+.venv/
+
+# === IDE файли ===
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# === OS специфіка ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Docker ===
+*.env
+.env.*
+docker-compose.override.yml
+
+# === Інше тимчасове ===
+*.bak
+*.tmp
+*.swp
+*.orig
+
+# === Логи та тимчасові файли ===
+*.log
+*.sqlite3
+*.db
+*.tgz
+*.zip
+
+# === Ключі та секрети (опціонально, якщо є) ===
+*.pem
+*.key
+*.crt
+
+# === Python compiled output ===
+build/
+dist/
+*.egg-info/
+*.egg
+*.whl
