@@ -3,7 +3,7 @@ import os
 import logging
 import tempfile
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
     ContextTypes, ConversationHandler, filters
@@ -31,19 +31,18 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 TOPIC, NAME, CONTACT = range(3)
 user_form_data = {}
 
-# === Старт команди /start з кнопкою ===
+# === Старт команди /start з постійною кнопкою ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("Залишити контакт", callback_data="contact")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    keyboard = [[KeyboardButton("Залишити контакт")]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
     await update.message.reply_text(
         "Я - асистент організації Brama-UA. Надсилай питання текстом, голосом або фото.",
         reply_markup=reply_markup
     )
 
-# === Запуск форми зворотного зв'язку через кнопку ===
-async def contact_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
-    await update.callback_query.message.reply_text("Яка тема вашого звернення?")
+# === Обробка кнопки «Залишити контакт» ===
+async def contact_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Яка тема вашого звернення?")
     return TOPIC
 
 # === Крок 1: користувач вводить тему звернення ===
@@ -73,6 +72,7 @@ async def contact_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Дякуємо! Ми зв'яжемося з вами найближчим часом.")
     return ConversationHandler.END
 
+# === Вихід з форми ===
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Скасовано.")
     return ConversationHandler.END
@@ -83,20 +83,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE, custom
     thread = client.beta.threads.create()
     user_input = custom_text if custom_text is not None else (update.message.text or "")
 
-    # === Перевірка на порожній текст перед надсиланням в OpenAI ===
     if not user_input.strip():
         await update.message.reply_text("Текст повідомлення порожній. Спробуйте ще раз.")
         return
 
-    # === Створення повідомлення і запуск асистента ===
     client.beta.threads.messages.create(thread.id, role="user", content=user_input)
     run = client.beta.threads.runs.create(thread_id=thread.id, assistant_id=ASSISTANT_ID)
 
-    # === Очікування завершення відповіді ===
     while run.status != "completed":
         run = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
 
-    # === Отримання і виведення відповіді від асистента ===
     messages = client.beta.threads.messages.list(thread_id=thread.id)
     for m in reversed(messages.data):
         if m.role == "assistant":
@@ -112,10 +108,8 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await file.download_to_drive(tmp.name)
         audio_file = open(tmp.name, "rb")
 
-        # === Використання OpenAI Whisper для транскрипції ===
         transcript = client.audio.transcriptions.create(model="whisper-1", file=audio_file)
 
-        # === Перевірка чи щось розпізнано ===
         if not transcript.text or not transcript.text.strip():
             await update.message.reply_text("Не вдалося розпізнати мову. Спробуйте ще раз.")
             return
@@ -132,10 +126,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await file.download_to_drive(tmp.name)
         image_file = open(tmp.name, "rb")
 
-        # === Завантаження зображення до OpenAI ===
         uploaded_file = client.files.create(file=image_file, purpose="assistants")
 
-        # === Створення потоку та надсилання зображення ===
         thread = client.beta.threads.create()
         client.beta.threads.messages.create(
             thread.id,
@@ -148,7 +140,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }]
         )
 
-        # === Запуск асистента і очікування результату ===
         run = client.beta.threads.runs.create(thread_id=thread.id, assistant_id=ASSISTANT_ID)
         while run.status != "completed":
             run = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
@@ -163,9 +154,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == "__main__":
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    # === Обробка форми контакту ===
     form_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(contact_callback, pattern="^contact$")],
+        entry_points=[MessageHandler(filters.Regex("^(Залишити контакт)$"), contact_command)],
         states={
             TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, topic_step)],
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, name_step)],
